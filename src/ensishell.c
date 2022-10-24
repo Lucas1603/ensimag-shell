@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+// to have the open 
+#include <fcntl.h>
 
 #include "variante.h"
 #include "readcmd.h"
@@ -46,7 +48,26 @@ int question6_executer(char *line)
 	 * parsecmd, then fork+execvp, for a single command.
 	 * pipe and i/o redirection are not required.
 	 */
-	printf("Not implemented yet: can not execute %s\n", line);
+	// printf("Not implemented yet: can not execute %s\n", line);
+	
+	// parse
+	struct cmdline *l;
+	l = parsecmd(& line);
+
+	pid_t pid;
+
+	pid = fork();
+
+	switch(pid) {
+		case -1:
+			perror("Error in fork");	
+			break;
+		case 0:
+			execvp(l->seq[0][0], l->seq[0]);
+			break;
+		default:
+			break;
+	}
 
 	/* Remove this line when using parsecmd as it will free it */
 	free(line);
@@ -88,7 +109,7 @@ int main() {
 	while (1) {
 		struct cmdline *l;
 		char *line=0;
-		int i, j;
+		// int i, j;
 		char *prompt = "ensishell>";
 
 		/* Readline use some internal memory structure that
@@ -129,22 +150,22 @@ int main() {
 			continue;
 		}
 
-		if (l->in) printf("in: %s\n", l->in);
-		if (l->out) printf("out: %s\n", l->out);
-		if (l->bg) printf("background (&)\n");
+		// if (l->in) printf("in: %s\n", l->in);
+		// if (l->out) printf("out: %s\n", l->out);
+		// if (l->bg) printf("background (&)\n");
 
 		// execute the program the user asked for in the cmd
 		execute_shell_command(l, &head);
 
 		/* Display each command of the pipe */
-		for (i=0; l->seq[i]!=0; i++) {
-			char **cmd = l->seq[i];
-			printf("seq[%d]: ", i);
-                        for (j=0; cmd[j]!=0; j++) {
-                                printf("'%s' ", cmd[j]);
-                        }
-			printf("\n");
-		}
+		// for (i=0; l->seq[i]!=0; i++) {
+		// 	char **cmd = l->seq[i];
+		// 	printf("\nseq[%d]: ", i);
+        //                 for (j=0; cmd[j]!=0; j++) {
+        //                         printf("'%s' ", cmd[j]);
+        //                 }
+		// 	printf("\n");
+		// }
 
 	}
 
@@ -158,13 +179,23 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 	pid_t pid;
 	// bg variable to decide whether we wait the child process or not
 	int bg = line->bg;
+	char* inputRedirect = line->in;
+	char* outputRedirect = line->out;
 	int status;
 	
-	int in;
+	int inputFile = 0;
+	int outputFile = 0;
 	// the pipe array
 	// pipes are producers consumer style
 	int pipe_data[2];
-	
+
+	// open the inputfile
+	if(inputRedirect) {
+		// we need to open the file 
+		if((inputFile = open(inputRedirect, O_RDONLY)) == -1) {
+			perror("Error opening input file");
+		}
+	}
 
 
 	if(!jobs(cmd[0][0], head)) {
@@ -185,13 +216,26 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 			case 0:
 				close(pipe_data[0]);
 
+				// make the inputFile the new stdin
+				dup2(inputFile, 0);
+				
 				// if it is not the last command
-				dup2(in, 0);
 				if(cmd[i+1]) {
+					// then make it the entry for the next process
+					// by writing what is in stdout to pipe_data
 					dup2(pipe_data[1], 1);
+				} 
+				// if it is the land command, we check if there is the redirection
+				// and if there is, we sendo to the designated file
+				else if(outputRedirect) {
+					// open the output file, truncating it
+					if( (outputFile = open(outputRedirect, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU)) == -1 ) {
+						perror("Error opening output file");
+					}
+					dup2(outputFile, 1);
 				}
 
-
+				close(pipe_data[1]);
 				// in case of being the child
 				// execute the command
 				execvp(cmd[i][0], cmd[i]);
@@ -203,8 +247,9 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 				break;
 			default:
 				close(pipe_data[1]);
-				in = pipe_data[0];
-
+				// make the input the stdout of the child
+				inputFile = pipe_data[0];
+				
 				if(bg) {
 					// execute in the background
 					insert_item(pid, cmd[i], head);
@@ -217,11 +262,9 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 				break;
 			}
 		}
-
-
 	}
-
 }
+
 
 int jobs(char* cmd, Process**head) {
 
