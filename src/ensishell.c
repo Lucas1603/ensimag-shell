@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <wordexp.h>
 // to have the open 
 #include <fcntl.h>
 
@@ -238,7 +239,22 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 				close(pipe_data[1]);
 				// in case of being the child
 				// execute the command
-				execvp(cmd[i][0], cmd[i]);
+				wordexp_t wstruct;
+				char** args=cmd[i];
+				char folders[255] = {'\0'};
+				while(*args){
+					strcat(folders, *args);
+					strcat(folders, " ");
+					args++;
+				}
+				// printf("Argumentos: %s\n",folders);
+				wordexp(folders, &wstruct, 0);
+				// char **found = wstruct.we_wordv;
+				// while(*found){
+				// 	printf("%s\n", *found);
+				// 	found++;
+				// }
+				execvp(cmd[i][0], wstruct.we_wordv);
 
 				// if the program reaches this point, it is sign of an error
 				// so we exit indicating the failure
