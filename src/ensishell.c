@@ -159,10 +159,10 @@ int main() {
 		execute_shell_command(l, &head);
 
 		/* Display each command of the pipe */
-		// for (i=0; l->seq[i]!=0; i++) {
+		// for (int i=0; l->seq[i]!=0; i++) {
 		// 	char **cmd = l->seq[i];
 		// 	printf("\nseq[%d]: ", i);
-        //                 for (j=0; cmd[j]!=0; j++) {
+        //                 for (int j=0; cmd[j]!=0; j++) {
         //                         printf("'%s' ", cmd[j]);
         //                 }
 		// 	printf("\n");
@@ -198,6 +198,7 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 		}
 	}
 
+	Process*current_process = NULL;
 
 	if(!jobs(cmd[0][0], head)) {
 
@@ -215,6 +216,7 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 				perror("Error in fork");	
 				break;
 			case 0:
+
 				close(pipe_data[0]);
 
 				// make the inputFile the new stdin
@@ -262,22 +264,34 @@ void execute_shell_command(struct cmdline *line, Process **head) {
 
 				break;
 			default:
+				insert_item(pid, cmd[0], &current_process);
+
 				close(pipe_data[1]);
 				// make the input the stdout of the child
 				inputFile = pipe_data[0];
 				
-				if(bg) {
-					// execute in the background
-					insert_item(pid, cmd[i], head);
-				}
-				else {
-					// wait for child process
-					if(!waitpid(pid, &status, WUNTRACED))
-						perror("Error in waitpid");
-				}
+				// int paralel = 0;
+				// char**cmd_aux = cmd[i];
+				// for(int j=0; cmd_aux[j]!=0; j++) {
+				// 	printf("PARALEL: %d\n",paralel);
+				// 	if(!strcmp("-p", cmd_aux[j])) paralel=1;
+				// }
 				break;
 			}
 		}
+		
+		if(bg){
+			// execute in the background
+			insert_item(pid, cmd[0], head);
+		}
+		else {
+			// wait for child process
+			for(;current_process != NULL; current_process = current_process->next) {
+				if(!waitpid(current_process->pid, &status, WUNTRACED))
+					perror("Error in waitpid");
+			}
+		}
+
 	}
 }
 
